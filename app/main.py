@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from . import supabase_db
 from .call_session import STREAM_PARAMS, CallSession, stream_token
 from .campaigns import (Campaign, CampaignProfile, DoNotCallList, ResultStore, add_contact, list_campaigns,
                         load_campaign, remove_added_contact)
@@ -108,11 +109,12 @@ async def lifespan(_: FastAPI):
         log.warning("config problem -> %s", p)
     if hasattr(rt.tts, "warm"):  # pre-synthesize the clinic greeting so the first words are instant
         asyncio.create_task(rt.tts.warm(rt.clinic.opening_line, rt.clinic.voice_id))
-    log.info("scenario=%s llm=%s model=%s campaigns=%s", rt.scenario.id, settings.llm_provider,
-             settings.resolved_llm_model, list_campaigns())
+    log.info("scenario=%s llm=%s model=%s campaigns=%s supabase=%s", rt.scenario.id, settings.llm_provider,
+             settings.resolved_llm_model, list_campaigns(), "on" if supabase_db.enabled() else "off")
     yield
     for d in rt.dialers.values():
         d.stop()
+    await supabase_db.drain()  # finish saving the last conversations
     if hasattr(rt.tts, "aclose"):
         await rt.tts.aclose()
 
@@ -133,7 +135,7 @@ def _check_dashboard_token(token: str | None) -> None:
 async def health():
     return {"ok": not rt.problems, "problems": rt.problems, "scenario": rt.scenario.id,
             "llm_provider": settings.llm_provider, "llm_model": settings.resolved_llm_model,
-            "campaigns": list_campaigns()}
+            "campaigns": list_campaigns(), "supabase": supabase_db.enabled()}
 
 
 # ------------------------------------------------------------------ Twilio
