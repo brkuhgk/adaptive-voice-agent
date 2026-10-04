@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Agent Live</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2330; --line: #2a3340; --text: #e6edf3; --muted: #8b98a8;
+    --accent: #58a6ff; --accent-2: #3fb950; --warn: #d29922; --danger: #f85149; --agent: #1f3a5f; --caller: #253041;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f6f8fa; --panel: #ffffff; --panel-2: #f3f5f8; --line: #d8dee4; --text: #1f2328; --muted: #59636e;
+      --accent: #0969da; --accent-2: #1a7f37; --warn: #9a6700; --danger: #cf222e; --agent: #ddeafe; --caller: #eef1f4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .brand h1 { margin: 0; font-size: 18px; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .callnum { font-size: 22px; font-weight: 700; letter-spacing: .5px; }
+  .callnum small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .pipeline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .stage { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 600; transition: all .15s; }
+  .stage.on { color: #fff; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .arrow { color: var(--muted); font-size: 12px; }
+  .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+  .dot.ok { background: var(--accent-2); }
+  #calls { display: flex; gap: 8px; padding: 10px 20px 0; flex-wrap: wrap; }
+  #calls button { background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+  #calls button.sel { color: var(--text); border-color: var(--accent); }
+  #calls button .live { color: var(--accent-2); }
+  main { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 14px 20px 20px; }
+  @media (max-width: 1100px) { main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } #col-transcript { grid-column: 1 / -1; } }
+  @media (max-width: 700px) { main { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; } header { padding: 12px 16px; } #calls { padding: 10px 16px 0; } }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+  section.card + section.card { margin-top: 16px; }
+  h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  #transcript { height: min(62vh, 640px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+  .msg { max-width: 86%; padding: 9px 12px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg .who { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: .6px; }
+  .agent { background: var(--agent); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .caller { background: var(--caller); align-self: flex-end; border-bottom-right-radius: 4px; }
+  .agent.streaming::after { content: " ▍"; color: var(--accent); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .unheard { opacity: .45; text-decoration: line-through; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+  .tag.red { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
+  .tag.amber { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+  .tag.green { background: color-mix(in srgb, var(--accent-2) 20%, transparent); color: var(--accent-2); }
+  .tag.blue { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+  .sys { align-self: center; font-size: 12px; color: var(--muted); }
+  .toolchip { align-self: flex-start; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); border: 1px dashed var(--line); padding: 3px 8px; border-radius: 8px; }
+  #caption { min-height: 22px; font-style: italic; color: var(--muted); margin-top: 8px; }
+  form#sim { display: flex; gap: 8px; margin-top: 10px; }
+  form#sim input { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font: inherit; }
+  form#sim button { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 0 14px; font-weight: 600; cursor: pointer; }
+  form#sim button:disabled { opacity: .5; }
+  .phases { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .phase { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: var(--panel-2); color: var(--muted); }
+  .phase.on { background: var(--accent); color: #fff; }
+  .phase.emergency.on { background: var(--danger); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px; }
+  .kv .k { color: var(--muted); }
+  .kv .v { overflow-wrap: anywhere; }
+  .field { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .field:last-child { border-bottom: 0; }
+  .field .name { color: var(--muted); }
+  .field .val { text-align: right; overflow-wrap: anywhere; }
+  .field.missing .val { color: var(--warn); }
+  .plan { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 6px; font-size: 14px; }
+  .appt { margin-top: 12px; padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent-2) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent); }
+  .slots { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+  .tool { border-bottom: 1px solid var(--line); padding: 8px 0; font-size: 13px; overflow-wrap: anywhere; }
+  .tool:last-child { border-bottom: 0; }
+  .tool b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); }
+  .tool pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font-size: 12px; max-height: 120px; overflow: auto; }
+  #tools { max-height: 320px; overflow-y: auto; }
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .metric { background: var(--panel-2); border-radius: 10px; padding: 10px; }
+  .metric .num { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .metric .lbl { font-size: 12px; color: var(--muted); }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 46px; margin-top: 10px; }
+  .bars div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .8; }
+  .empty { color: var(--muted); font-size: 13px; }
+  .wide { padding: 0 20px 24px; }
+  @media (max-width: 700px) { .wide { padding: 0 16px 20px; } }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .row label { font-size: 12px; color: var(--muted); }
+  select, .btn { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; max-width: 100%; }
+  .btn { cursor: pointer; font-weight: 600; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--danger); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .goal { font-size: 14px; margin: 0 0 10px; }
+  .issues { margin: 0 0 10px; padding-left: 18px; font-size: 13px; }
+  .issues .error { color: var(--danger); } .issues .warning { color: var(--warn); } .issues .info { color: var(--muted); }
+  form#addc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 12px; padding: 10px; border: 1px dashed var(--line); border-radius: 10px; }
+  form#addc input[type=text], form#addc input[type=tel], form#addc input[type=email] { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; flex: 1 1 150px; min-width: 0; }
+  form#addc label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  table.ct td.note { white-space: normal; min-width: 180px; color: var(--muted); }
+  table.ct .btn { padding: 3px 9px; font-size: 12px; }
+  table.ct input[type=checkbox] { width: 16px; height: 16px; }
+  .tablewrap { overflow-x: auto; }
+  table.ct { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.ct th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.ct td { padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  #simtarget { flex: 0 1 190px; }
+  #appts { font-size: 13px; }
+  #appts div { padding: 4px 0; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1 id="title">Adaptive Voice Agent</h1>
+    <p id="subtitle">Live view</p>
+  </div>
+  <div class="pipeline" aria-label="pipeline">
+    <span class="stage" id="st-stt">Speech-to-text</span><span class="arrow">→</span>
+    <span class="stage" id="st-state">State + context</span><span class="arrow">→</span>
+    <span class="stage" id="st-llm">LLM reasoning</span><span class="arrow">→</span>
+    <span class="stage" id="st-tts">Text-to-speech</span>
+  </div>
+  <div class="callnum" id="callnum"></div>
+  <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting…</span></div>
+</header>
+<div id="calls"></div>
+<main>
+  <div id="col-transcript">
+    <section class="card">
+      <h2>Live conversation</h2>
+      <div id="transcript"><div class="empty">Waiting for a call. Dial the number above, or type below to test in text mode.</div></div>
+      <div id="caption"></div>
+      <form id="sim" autocomplete="off">
+        <select id="simtarget" aria-label="Who to test in text mode"><option value="">Clinic (inbound)</option></select>
+        <input id="simtext" placeholder="Text mode: type as the other person…" aria-label="Type as the other person">
+        <button id="simbtn" type="submit">Send</button>
+      </form>
+    </section>
+  </div>
+  <div>
+    <section class="card">
+      <h2>Conversation state</h2>
+      <div class="phases" id="phases"></div>
+      <div class="kv" id="summary"></div>
+      <div style="margin-top:12px" id="fields"></div>
+      <div id="plan"></div>
+      <div id="offered"></div>
+      <div id="appt"></div>
+    </section>
+  </div>
+  <div>
+    <section class="card">
+      <h2>Latency (end of speech →)</h2>
+      <div class="metrics">
+        <div class="metric"><div class="num" id="m-llm">–</div><div class="lbl">LLM first token, ms</div></div>
+        <div class="metric"><div class="num" id="m-audio">–</div><div class="lbl">first audio sent, ms</div></div>
+      </div>
+      <div class="bars" id="bars" title="first-audio latency, recent turns"></div>
+    </section>
+    <section class="card">
+      <h2>Reasoning trace: tool calls</h2>
+      <div id="tools"><div class="empty">No tool calls yet.</div></div>
+    </section>
+    <section class="card">
+      <h2>Clinic schedule: booked</h2>
+      <div id="appts"><div class="empty">Loading…</div></div>
+    </section>
+  </div>
+</main>
+<div class="wide">
+  <section class="card" id="campaign-card">
+    <h2>Outbound campaigns</h2>
+    <div class="row">
+      <label for="camp">Campaign</label><select id="camp"></select>
+      <button class="btn primary" id="camp-start" type="button">Start calls</button>
+      <button class="btn danger" id="camp-stop" type="button">Stop</button>
+      <button class="btn" id="camp-refresh" type="button">Reload files</button>
+      <span id="camp-status" class="empty"></span>
+    </div>
+    <p class="goal" id="camp-goal"></p>
+    <div class="row">
+      <label for="voice">Voice</label><select id="voice"></select>
+      <button class="btn" id="voice-preview" type="button">▶ Preview</button>
+      <button class="btn" id="voice-save" type="button">Use this voice</button>
+      <span id="voice-note" class="empty"></span>
+    </div>
+    <ul class="issues" id="camp-issues"></ul>
+    <div class="row">
+      <button class="btn primary" id="call-selected" type="button" disabled>Call selected</button>
+      <label><input type="checkbox" id="ignore-hours"> Call outside calling hours</label>
+      <span class="empty">Tick people below, or use a row's Call button. Calls again even if they were already called.</span>
+    </div>
+    <form id="addc" autocomplete="off">
+      <input type="tel" id="addc-phone" placeholder="Phone, e.g. +12105550123" aria-label="Phone number" required>
+      <input type="text" id="addc-name" placeholder="Name" aria-label="Name">
+      <input type="email" id="addc-email" placeholder="Email (optional)" aria-label="Email">
+      <label><input type="checkbox" id="addc-consent"> They agreed to get this call</label>
+      <button class="btn" type="submit" id="addc-add">Add</button>
+      <button class="btn primary" type="button" id="addc-call">Add &amp; call now</button>
+      <span id="addc-note" class="empty"></span>
+    </form>
+    <div class="tablewrap"><table class="ct" id="camp-table"></table></div>
+  </section>
+</div>
+<script>
+const TOKEN = new URLSearchParams(location.search).get("token");
+const q = (p) => TOKEN ? `${p}${p.includes("?") ? "&" : "?"}token=${encodeURIComponent(TOKEN)}` : p;
+const $ = (id) => document.getElementById(id);
+const PHASES = ["identify_need", "answering", "collecting_details", "choosing_slot", "scheduling", "cancelling", "confirmed", "emergency", "wrap_up"];
+const CAMPAIGN_PHASES = ["opening", "collecting", "goal_met", "wrap_up", "opted_out"];
+const calls = new Map();
+let selected = null, followLatest = true, simSession = null, stageTimer = null;
+
+function call(id) {
+  if (!calls.has(id)) calls.set(id, { id, items: [], state: null, tools: [], metrics: {}, active: true, caption: "", started: Date.now() });
+  return calls.get(id);
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function pretty(s) { return String(s).replace(/_/g, " "); }
+
+function stage(name) {
+  ["stt", "state", "llm", "tts"].forEach(s => $("st-" + s).classList.toggle("on", s === name));
+  clearTimeout(stageTimer);
+  if (name) stageTimer = setTimeout(() => stage(null), 2500);
+}
+
+// The reply currently being generated: the newest agent bubble still streaming, if no caller turn came after it.
+function streamingAgent(c) {
+  for (let i = c.items.length - 1; i >= 0; i--) {
+    const it = c.items[i];
+    if (it.kind === "caller") return null;
+    if (it.kind === "agent") return it.streaming ? it : null;
+  }
+  return null;
+}
+function lastAgent(c) { for (let i = c.items.length - 1; i >= 0; i--) if (c.items[i].kind === "agent") return c.items[i]; return null; }
+
+function handle(e) {
+  if (String(e.call_id).startsWith("campaign:")) { campaignEvent(e); return; }
+  const c = call(e.call_id);
+  switch (e.type) {
+    case "call_started": c.meta = e; c.active = true; c.started = e.ts * 1000; if (followLatest) selected = c.id; break;
+    case "caption": c.caption = e.text; stage("stt"); break;
+    case "user_turn": c.caption = ""; c.items.push({ kind: "caller", text: e.text }); stage("state"); break;
+    case "retract": {
+      const i = c.items.map(x => x.kind === "caller" && x.text === e.text).lastIndexOf(true);
+      if (i >= 0) c.items.splice(i, 1);
+      const a = lastAgent(c); if (a && a.streaming) c.items.splice(c.items.indexOf(a), 1);
+      break;
+    }
+    case "system_event": c.items.push({ kind: "sys", text: e.text }); break;
+    case "agent_delta": {
+      let a = streamingAgent(c);
+      if (!a) { a = { kind: "agent", text: "", streaming: true }; c.items.push(a); }
+      a.text += e.text; stage("llm"); break;
+    }
+    case "agent_turn": {
+      if (e.interrupted) {
+        const a = lastAgent(c);
+        if (a) { a.streaming = false; a.heard = e.text || ""; a.interrupted = true; }
+      } else {
+        const a = streamingAgent(c);
+        if (a) { a.text = e.text; a.streaming = false; }
+        else c.items.push({ kind: "agent", text: e.text });
+      }
+      break;
+    }
+    case "agent_said": stage("tts"); break;
+    case "tool_call": {
+      c.tools.unshift(e);
+      const a = streamingAgent(c), chip = { kind: "tool", text: e.name };
+      if (a) c.items.splice(c.items.indexOf(a), 0, chip); else c.items.push(chip);  // chip above the reply it feeds
+      stage("llm"); break;
+    }
+    case "state": c.state = e.state; stage("state"); break;
+    case "metric": (c.metrics[e.rid] ||= {})[e.name] = e.value; break;
+    case "barge_in": c.items.push({ kind: "sys", text: "", tag: ["red", "caller interrupted"] }); break;
+    case "backchannel": c.items.push({ kind: "sys", text: `backchannel ignored: “${e.text}”` }); break;
+    case "hangup": c.items.push({ kind: "sys", text: "", tag: ["blue", "agent hung up"] }); break;
+    case "call_ended": c.active = false; if (e.state) c.state = e.state; c.items.push({ kind: "sys", text: "", tag: ["blue", "call ended"] }); loadAppts();
+      if (e.state?.labels?.campaign) scheduleCampaignRefresh(); break;
+    case "error": c.items.push({ kind: "sys", text: `${e.where}: ${e.detail}`, tag: ["red", "error"] }); break;
+    case "agent_idle": stage(null); break;
+    case "followup": c.items.push({ kind: "sys", text: `${e.option} by ${e.channel}: ${e.status}`, tag: [String(e.status).startsWith("sent") ? "green" : "red", "follow-up"] });
+      if (c.state?.labels) { c.state.labels.followups = (c.state.labels.followups || []).map(x => x.startsWith(`${e.option} by ${e.channel}`) ? `${e.option} by ${e.channel} (${e.status})` : x); }
+      break;
+  }
+  if (e.type === "tool_call" && /book|cancel/.test(e.name)) loadAppts();
+}
+
+function renderCalls() {
+  const list = [...calls.values()].sort((a, b) => b.started - a.started).slice(0, 8);
+  $("calls").innerHTML = list.map(c => {
+    const label = c.meta?.caller || c.id.slice(0, 10);
+    return `<button class="${c.id === selected ? "sel" : ""}" data-id="${esc(c.id)}">${c.active ? '<span class="live">●</span> ' : ""}${esc(label)}</button>`;
+  }).join("");
+  $("calls").querySelectorAll("button").forEach(b => b.onclick = () => { selected = b.dataset.id; followLatest = false; render(); });
+}
+
+function renderTranscript(c) {
+  const box = $("transcript");
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.innerHTML = c.items.map(it => {
+    if (it.kind === "sys") return `<div class="sys">${esc(it.text)}${it.tag ? `<span class="tag ${it.tag[0]}">${esc(it.tag[1])}</span>` : ""}</div>`;
+    if (it.kind === "tool") return `<div class="toolchip">⚙ ${esc(it.text)}()</div>`;
+    if (it.kind === "caller") return `<div class="msg caller"><span class="who">Caller</span>${esc(it.text)}</div>`;
+    let body = esc(it.text);
+    if (it.interrupted) {
+      const heard = it.heard || "";
+      body = it.text.startsWith(heard) ? `${esc(heard)}<span class="unheard">${esc(it.text.slice(heard.length))}</span>` : `${esc(heard || "(cut off)")}`;
+    }
+    const name = c.meta?.agent || "Agent";
+    return `<div class="msg agent ${it.streaming ? "streaming" : ""}"><span class="who">${esc(name)}${it.interrupted ? '<span class="tag red">cut off</span>' : ""}</span>${body}</div>`;
+  }).join("") || '<div class="empty">Call connected…</div>';
+  if (atBottom) box.scrollTop = box.scrollHeight;
+  $("caption").textContent = c.caption ? `🎙 ${c.caption}` : "";
+}
+
+function renderState(c) {
+  const s = c.state;
+  if (!s) { $("summary").innerHTML = '<span class="empty">No state yet.</span>'; return; }
+  const isCampaign = s.labels?.profile === "campaign";
+  const phases = isCampaign ? CAMPAIGN_PHASES.filter(p => p === s.phase || p !== "opted_out")
+    : PHASES.filter(p => p === s.phase || !["answering", "cancelling", "emergency", "scheduling"].includes(p));
+  $("phases").innerHTML = phases.map(p => `<span class="phase ${p} ${p === s.phase ? "on" : ""}">${pretty(p)}</span>`).join("");
+  const urg = s.urgency === "emergency" ? "red" : s.urgency === "same_day" ? "amber" : "green";
+  $("summary").innerHTML = `
+    <span class="k">Intent</span><span class="v">${esc(pretty(s.intent))}</span>
+    <span class="k">Urgency</span><span class="v"><span class="tag ${urg}" style="margin:0">${esc(pretty(s.urgency))}</span> ${esc(s.urgency_reason || "")}</span>
+    <span class="k">Sentiment</span><span class="v">${esc(s.caller_sentiment)}</span>
+    <span class="k">Turns</span><span class="v">${s.turns} · ${s.interruptions} interruption${s.interruptions === 1 ? "" : "s"} · ${Math.round(s.elapsed_s)}s</span>
+    ${isCampaign ? `<span class="k">Calling</span><span class="v">${esc(s.labels.contact_name)} · ${esc(s.labels.campaign)}${s.labels.text_mode ? " (text test)" : ""}</span>
+    <span class="k">Voice</span><span class="v">${esc(s.labels.voice_id)}</span>
+    <span class="k">Outcome</span><span class="v">${s.outcome ? `<span class="tag ${s.outcome === "opted_out" ? "red" : "green"}" style="margin:0">${esc(pretty(s.outcome))}</span> ${esc(s.summary || "")}` : "–"}</span>
+    <span class="k">Sent</span><span class="v">${(s.labels.followups || []).map(esc).join("<br>") || "–"}</span>` : ""}`;
+  $("fields").innerHTML = Object.entries(s.fields).map(([k, v]) => {
+    const req = s.required_fields.includes(k);
+    return `<div class="field ${!v && req ? "missing" : ""}"><span class="name">${esc(pretty(k))}${req ? " *" : ""}</span><span class="val">${v ? "✓ " + esc(v) : (req ? "needed" : "–")}</span></div>`;
+  }).join("");
+  $("plan").innerHTML = s.next_best_action ? `<div class="plan"><b>Planner:</b> ${esc(s.next_best_action)}</div>` : "";
+  $("offered").innerHTML = s.offered_slots?.length ? `<div style="margin-top:12px;font-size:13px">Offered slots<ul class="slots">${s.offered_slots.map(o => `<li>${esc(o.description)}</li>`).join("")}</ul></div>` : "";
+  const a = s.appointment;
+  $("appt").innerHTML = a ? `<div class="appt"><b>Booked ${esc(a.appointment_id)}</b><br>${esc(a.patient_name)} · ${esc(pretty(a.visit_type))}<br>${esc(a.when)} with ${esc(a.provider)}</div>` : "";
+}
+
+function renderTools(c) {
+  $("tools").innerHTML = c.tools.length ? c.tools.slice(0, 20).map(t =>
+    `<div class="tool"><b>${esc(t.name)}</b>(${esc(JSON.stringify(t.args))})<pre>→ ${esc(JSON.stringify(t.result, null, 1))}</pre></div>`).join("")
+    : '<div class="empty">No tool calls yet.</div>';
+}
+
+function renderMetrics(c) {
+  const rows = Object.entries(c.metrics).sort((a, b) => +a[0] - +b[0]).map(([, m]) => m);
+  const last = rows.filter(m => m.first_audio_ms).slice(-1)[0];
+  $("m-llm").textContent = last?.llm_first_token_ms ?? "–";
+  $("m-audio").textContent = last?.first_audio_ms ?? "–";
+  const recent = rows.filter(m => m.first_audio_ms).slice(-14);
+  const max = Math.max(1500, ...recent.map(m => m.first_audio_ms));
+  $("bars").innerHTML = recent.map(m => `<div style="height:${Math.round(m.first_audio_ms / max * 100)}%" title="${m.first_audio_ms} ms"></div>`).join("");
+}
+
+let raf = null;
+function render() {
+  if (raf) return;
+  raf = requestAnimationFrame(() => {
+    raf = null;
+    renderCalls();
+    const c = selected && calls.get(selected);
+    if (!c) return;
+    renderTranscript(c); renderState(c); renderTools(c); renderMetrics(c);
+  });
+}
+
+async function loadAppts() {
+  try {
+    const list = await (await fetch(q("/api/appointments"))).json();
+    const booked = list.filter(a => a.status === "booked");
+    $("appts").innerHTML = booked.length ? booked.map(a => `<div><b>${esc(a.appointment_id)}</b> ${esc(a.patient_name)} · ${esc(a.when)} · ${esc(a.provider)}</div>`).join("") : '<div class="empty">Nothing booked.</div>';
+  } catch { /* server restarting */ }
+}
+
+async function loadInfo() {
+  try {
+    const info = await (await fetch(q("/api/info"))).json();
+    $("title").textContent = `${info.agent} · adaptive voice agent`;
+    $("subtitle").textContent = `Inbound: ${info.org} · Outbound: campaigns below · ${info.llm}${info.problems.length ? " · ⚠ " + info.problems.join(" | ") : ""}`;
+    if (info.phone) $("callnum").innerHTML = `<small>Call the agent</small>${esc(info.phone)}`;
+  } catch { /* ignore */ }
+}
+
+function connect() {
+  const es = new EventSource(q("/events"));
+  es.onopen = () => { $("dot").classList.add("ok"); $("conn").textContent = "live"; };
+  es.onerror = () => { $("dot").classList.remove("ok"); $("conn").textContent = "reconnecting…"; };
+  es.onmessage = (m) => { handle(JSON.parse(m.data)); render(); };
+}
+
+$("sim").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const text = $("simtext").value.trim();
+  if (!text) return;
+  $("simtext").value = ""; $("simbtn").disabled = true; followLatest = true;
+  try {
+    const campaign = $("simtarget").value || null;
+    const r = await fetch(q("/api/sim/message"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: simSession, text, campaign }) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    simSession = data.ended ? null : data.session_id;
+  } catch (err) {
+    const c = call(selected || "text-error"); c.items.push({ kind: "sys", text: String(err.message || err), tag: ["red", "error"] }); selected = c.id; render();
+  } finally { $("simbtn").disabled = false; $("simtext").focus(); }
+});
+
+// ------------------------------------------------------------------ campaigns
+let campName = null, campRefreshTimer = null, voices = [], campContacts = [];
+const picked = new Set();
+const api = async (path, opts = {}) => {
+  const r = await fetch(q(path), { headers: { "Content-Type": "application/json" }, ...opts });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+};
+function scheduleCampaignRefresh() { clearTimeout(campRefreshTimer); campRefreshTimer = setTimeout(loadCampaign, 400); }
+function campaignEvent(e) {
+  if (e.type === "campaign_finished") $("camp-status").textContent = `finished: ${e.placed} call(s) placed${e.stopped ? " (stopped)" : ""}`;
+  if (e.type === "campaign_error") $("camp-status").textContent = `error: ${e.detail}`;
+  if (e.campaign === campName) scheduleCampaignRefresh();
+}
+async function loadCampaigns() {
+  try {
+    const list = await api("/api/campaigns");
+    $("camp").innerHTML = list.map(c => `<option value="${esc(c.name)}">${esc(c.title || c.name)}${c.error ? " (error)" : ""}</option>`).join("");
+    $("simtarget").innerHTML = '<option value="">Clinic (inbound)</option>' + list.map(c => `<option value="${esc(c.name)}">Campaign: ${esc(c.name)}</option>`).join("");
+    if (!list.length) { $("campaign-card").querySelector(".goal").textContent = "No campaigns yet. Run: python -m scripts.campaign new <name>"; return; }
+    campName = campName || list[0].name; $("camp").value = campName;
+    await loadCampaign();
+  } catch (err) { $("camp-status").textContent = String(err.message || err); }
+}
+async function loadCampaign() {
+  if (!campName) return;
+  try {
+    const c = await api(`/api/campaigns/${encodeURIComponent(campName)}`);
+    const ready = c.contacts.filter(x => x.eligible).length;
+    $("camp-goal").innerHTML = `<b>${esc(c.agent_name)}</b> for ${esc(c.org_name)}: ${esc(c.goal)}<br><span class="empty">Collects ${esc(c.collect.join(", ") || "nothing")} · calls ${esc(c.hours.start)}–${esc(c.hours.end)} ${esc(c.hours.days)} (${esc(c.hours.timezone)})</span>`;
+    $("camp-status").textContent = c.running ? `running · ${c.active_calls} active call(s)` : `${ready} of ${c.contacts.length} ready to call`;
+    $("camp-start").disabled = c.running || !ready; $("camp-stop").disabled = !c.running;
+    $("camp-issues").innerHTML = c.issues.map(i => `<li class="${i.level}">${esc(i.message)}</li>`).join("");
+    campContacts = c.contacts;
+    const canCall = (x) => x.can_call || ($("ignore-hours").checked && x.can_call_any_time);
+    const callable = new Set(c.contacts.filter(canCall).map(x => x.id));
+    [...picked].forEach(id => { if (!callable.has(id)) picked.delete(id); });
+    const allPicked = callable.size && [...callable].every(id => picked.has(id));
+    $("camp-table").innerHTML = `<tr><th><input type="checkbox" id="pick-all" aria-label="Select everyone who can be called" ${allPicked ? "checked" : ""} ${callable.size && !c.running ? "" : "disabled"}></th><th>Name</th><th>Phone</th><th>Ready</th><th>Call status</th><th>Outcome</th><th>Tries</th><th>Note</th><th></th></tr>` +
+      c.contacts.map(x => {
+        const note = [x.eligible ? "" : x.reason, x.note, x.followups && `sent: ${x.followups}`, x.summary].filter(Boolean).join(" · ");
+        const why = canCall(x) ? "" : ` title="${esc(x.can_call_any_time ? x.call_reason + " (tick 'Call outside calling hours')" : x.call_reason)}"`;
+        return `<tr><td><input type="checkbox" class="pick" data-id="${esc(x.id)}" aria-label="Select ${esc(x.name)}" ${picked.has(x.id) ? "checked" : ""} ${canCall(x) && !c.running ? "" : "disabled"}${why}></td>` +
+          `<td>${esc(x.name)}${x.added ? ' <span class="tag blue">added</span>' : ""}</td><td>${esc(x.phone)}</td><td>${x.eligible ? "✓" : "–"}</td><td>${esc(x.call_status)}</td>` +
+          `<td>${x.outcome ? `<span class="tag ${x.outcome === "opted_out" ? "red" : "green"}" style="margin:0">${esc(pretty(x.outcome))}</span>` : ""}</td><td>${esc(x.attempts)}</td>` +
+          `<td class="note">${esc(note)}${canCall(x) || x.call_reason === x.reason ? "" : ` · can't call: ${esc(x.call_reason)}`}</td>` +
+          `<td><button class="btn primary call-one" type="button" data-id="${esc(x.id)}" ${canCall(x) && !c.running ? "" : "disabled"}${why}>Call</button>` +
+          `${x.added ? ` <button class="btn danger remove-one" type="button" data-id="${esc(x.id)}" ${c.running ? "disabled" : ""}>Remove</button>` : ""}</td></tr>`;
+      }).join("");
+    const boxes = [...$("camp-table").querySelectorAll(".pick:not(:disabled)")];
+    boxes.forEach(b => b.onchange = () => { b.checked ? picked.add(b.dataset.id) : picked.delete(b.dataset.id); $("pick-all").checked = boxes.every(x => x.checked); updateCallSelected(c.running); });
+    $("pick-all").onchange = (ev) => { boxes.forEach(b => { b.checked = ev.target.checked; b.onchange(); }); };
+    $("camp-table").querySelectorAll(".call-one").forEach(b => b.onclick = () => callContacts([b.dataset.id]));
+    $("camp-table").querySelectorAll(".remove-one").forEach(b => b.onclick = () => removeContact(b.dataset.id));
+    updateCallSelected(c.running);
+    renderVoiceSelect(c.voice_id, c.voice_is_default);
+  } catch (err) { $("camp-status").textContent = String(err.message || err); }
+}
+function updateCallSelected(running) {
+  $("call-selected").disabled = running || !picked.size;
+  $("call-selected").textContent = picked.size ? `Call selected (${picked.size})` : "Call selected";
+}
+async function callContacts(ids) {
+  const names = ids.map(id => campContacts.find(x => x.id === id)?.name || id).join(", ");
+  $("camp-status").textContent = `calling ${names}…`;
+  try {
+    const r = await api(`/api/campaigns/${encodeURIComponent(campName)}/call`, { method: "POST", body: JSON.stringify({ contact_ids: ids, ignore_hours: $("ignore-hours").checked }) });
+    $("camp-status").textContent = `calling ${r.will_call} of ${ids.length}${r.skipped.length ? " · skipped " + r.skipped.join("; ") : ""}`;
+    ids.forEach(id => picked.delete(id));
+  } catch (err) { $("camp-status").textContent = String(err.message || err); }
+  loadCampaign();
+}
+async function removeContact(id) {
+  try { await api(`/api/campaigns/${encodeURIComponent(campName)}/contacts/${encodeURIComponent(id)}`, { method: "DELETE" }); picked.delete(id); }
+  catch (err) { $("camp-status").textContent = String(err.message || err); }
+  loadCampaign();
+}
+async function addContact(callNow) {
+  if (!$("addc").reportValidity()) return;
+  if (!$("addc-consent").checked) { $("addc-note").textContent = "Only add people who agreed to get this call: tick the box."; return; }
+  $("addc-note").textContent = callNow ? "adding and calling…" : "adding…";
+  try {
+    const r = await api(`/api/campaigns/${encodeURIComponent(campName)}/contacts`, { method: "POST", body: JSON.stringify({
+      phone: $("addc-phone").value, name: $("addc-name").value, email: $("addc-email").value, consent: true, call_now: callNow,
+      ignore_hours: $("ignore-hours").checked }) });
+    $("addc-note").textContent = r.call_error ? `added, but can't call: ${r.call_error}` : callNow ? "added · calling now" : "added";
+    $("addc").reset();
+  } catch (err) { $("addc-note").textContent = String(err.message || err); }
+  loadCampaign();
+}
+$("call-selected").addEventListener("click", () => callContacts([...picked]));
+$("ignore-hours").addEventListener("change", loadCampaign);
+$("addc").addEventListener("submit", (ev) => { ev.preventDefault(); addContact(false); });
+$("addc-call").addEventListener("click", () => addContact(true));
+
+function renderVoiceSelect(current, isDefault) {
+  const known = voices.some(v => v.voice_id === current);
+  const opts = voices.map(v => `<option value="${esc(v.voice_id)}">${esc(v.name)}${v.labels?.gender ? " · " + esc(v.labels.gender) : ""}${v.labels?.accent ? " · " + esc(v.labels.accent) : ""}</option>`);
+  if (!known) opts.unshift(`<option value="${esc(current)}">${esc(current)}${isDefault ? " (default)" : ""}</option>`);
+  $("voice").innerHTML = opts.join("");
+  $("voice").value = current;
+  $("voice-note").textContent = isDefault ? "using the default voice from .env" : "";
+}
+async function loadVoices() {
+  try { voices = (await api("/api/voices")).voices; }
+  catch (err) { voices = []; $("voice-note").textContent = "voice list unavailable: " + (err.message || err); }
+}
+$("camp").addEventListener("change", () => { campName = $("camp").value; loadCampaign(); });
+$("camp-refresh").addEventListener("click", loadCampaign);
+$("camp-start").addEventListener("click", async () => {
+  try { const r = await api(`/api/campaigns/${encodeURIComponent(campName)}/start`, { method: "POST" }); $("camp-status").textContent = `started · calling ${r.will_call}`; }
+  catch (err) { $("camp-status").textContent = String(err.message || err); }
+  loadCampaign();
+});
+$("camp-stop").addEventListener("click", async () => { await api(`/api/campaigns/${encodeURIComponent(campName)}/stop`, { method: "POST" }).catch(() => {}); loadCampaign(); });
+$("voice-preview").addEventListener("click", () => {
+  const v = voices.find(x => x.voice_id === $("voice").value);
+  if (v?.preview_url) new Audio(v.preview_url).play(); else $("voice-note").textContent = "no preview for this voice";
+});
+$("voice-save").addEventListener("click", async () => {
+  try {
+    await api(`/api/campaigns/${encodeURIComponent(campName)}`, { method: "PATCH", body: JSON.stringify({ voice_id: $("voice").value }) });
+    await loadCampaign(); $("voice-note").textContent = "saved to campaign.json";
+  }
+  catch (err) { $("voice-note").textContent = String(err.message || err); }
+});
+$("simtarget").addEventListener("change", () => { simSession = null; });
+
+loadInfo(); loadAppts(); connect(); loadVoices().then(loadCampaigns);
+</script>
+</body>
+</html>

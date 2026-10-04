@@ -1,0 +1,28 @@
+{
+  "title": "Hack Night check-in (sample)",
+  "agent_name": "Maya",
+  "org_name": "Hack Night",
+  "callback_number": "(210) 555-0142",
+  "voice_id": "",
+
+  "goal": "Confirm if {first_name} still plans to come to Hack Night, collect their t-shirt size and any dietary needs, and answer their questions about the event.",
+  "opening_line": "Hi, this is Maya, an   calling from Hack Night. Am I speaking with {first_name}?",
+  "closing_line": "Thanks, {first_name}. See you at Hack Night. Bye!",
+  "voicemail_message": "Hi {first_name}, this is Maya, an   from Hack Night, calling about your registration. You don't need to call back. We'll send the details by email. Bye!",
+
+  "collect": {
+    "attending": {"description": "Are they still coming? yes, no, or maybe", "required": true},
+    "tshirt_size": {"description": "T-shirt size: XS, S, M, L, XL, or XXL", "required": true},
+    "dietary_needs": {"description": "Food allergies or dietary needs, or none", "required": false}
+  },
+  "outcomes": ["completed", "not_interested", "callback_requested", "wrong_person", "opted_out"],
+
+  "calling_hours": {"start": "09:00", "end": "20:00", "timezone": "America/Chicago", "days": "mon-sun"},
+  "max_concurrent_calls": 1,
+  "max_attempts": 2,
+  "ring_timeout_seconds": 25,
+  "answering_machine": "detect",
+  "opt_out_digit": "9",
+  "max_call_seconds": 300,
+  "keyterms": ["Hack Night", "Student Union"]
+}

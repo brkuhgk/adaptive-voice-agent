@@ -1,0 +1,20 @@
+.git
+.env
+.env.*
+!.env.example
+.venv*
+venv
+__pycache__
+*.pyc
+.pytest_cache
+tests
+docs
+deploy/*.json
+.fly-deploy.json
+.dashboard-link.txt
+campaigns/*/results.csv
+campaigns/*/results.tmp
+campaigns/*/transcripts
+campaigns/do_not_call.txt
+adaptive-voice-agent 2
+.update

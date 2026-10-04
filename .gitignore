@@ -1,0 +1,18 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+# campaign data: phone numbers and call results stay on your machine
+campaigns/*/results.csv
+campaigns/*/results.tmp
+campaigns/*/transcripts/
+campaigns/do_not_call.txt
+# deploy state (contains no keys, but the dashboard link has your dashboard token)
+.fly-deploy.json
+.dashboard-link.txt
+fly.toml
+.update/
+.venv-py39-old/
+.DS_Store

@@ -1,0 +1,96 @@
+{
+  "title": "Rewards program invitation (sample:   starbucks)",
+  "agent_name": "Maya",
+  "org_name": "  starbucks",
+  "callback_number": "+14473474251",
+  "voice_id": "EXAVITQu4vr4xnSDxMaL",
+  "goal": "Tell {first_name} about   starbucks Rewards, our free loyalty program for regular customers. Find out what they enjoy most, and if they want to join, send them the sign-up link that fits their interest by text or email.",
+  "opening_line": "Hi, this is Maya calling from   starbucks Coffee Co. Am I speaking with {first_name}?",
+  "disclose_ai_in_opening": false,
+  "closing_line": "Thanks, {first_name}. Enjoy your next coffee!",
+  "voicemail_message": "Hi {first_name}, this is Maya, an   from   starbucks Coffee Co. We have a free rewards program for regulars like you. Ask for it at the counter on your next visit. Have a great day!",
+  "collect": {
+    "joins_program": {
+      "description": "Do they want to join   starbucks Rewards? yes, no, or maybe",
+      "required": true
+    },
+    "interest": {
+      "description": "What they enjoy most: home_brewing, daily_coffee, food, or events",
+      "required": true
+    },
+    "favorite_drink": {
+      "description": "Their usual drink, if they mention it",
+      "required": false
+    },
+    "feedback": {
+      "description": "Any comment about the shop, in their words",
+      "required": false
+    }
+  },
+  "outcomes": [
+    "completed",
+    "not_interested",
+    "callback_requested",
+    "wrong_person",
+    "opted_out"
+  ],
+  "followups": {
+    "channels": [
+      "email",
+      "sms"
+    ],
+    "max_per_call": 2,
+    "options": {
+      "home_brewing": {
+        "label": "Join + 15% off beans for home brewers",
+        "when": "They brew coffee at home, buy beans, or ask about grinders or roasts.",
+        "link": "https://hackprank.com/",
+        "sms": "Hi {first_name}, it's Maya from   starbucks Coffee Co. Join   starbucks Rewards free and get 15% off your next bag of beans: {link}",
+        "email_subject": "{first_name}, your   starbucks Rewards link (15% off beans)",
+        "email_body": "Hi {first_name},\n\nThanks for chatting with Maya today. Join   starbucks Rewards for free and get 15% off your next bag of beans:\n{link}\n\nMembers earn 1 star per dollar, a free drink every 100 stars, and a birthday drink on us.\n\n  starbucks Coffee Co.\n(210) 555-0188"
+      },
+      "daily_coffee": {
+        "label": "Join + free drink after the first 5 visits",
+        "when": "They visit often, grab coffee on the way to work, or care about saving on daily drinks.",
+        "link": "https://badhtml.com/",
+        "sms": "Hi {first_name}, it's Maya from   starbucks Coffee Co. Join   starbucks Rewards free; your 6th drink is on us: {link}",
+        "email_subject": "{first_name}, your   starbucks Rewards link (6th drink free)",
+        "email_body": "Hi {first_name},\n\nThanks for talking with Maya today. Join   starbucks Rewards for free and your 6th drink is on us:\n{link}\n\nMembers also get double stars on Tuesdays and a birthday drink.\n\n  starbucks Coffee Co.\n(210) 555-0188"
+      },
+      "food": {
+        "label": "Join + free pastry with any drink",
+        "when": "They mention pastries, breakfast, lunch, or food.",
+        "link": "https://badhtml.com/",
+        "sms": "Hi {first_name}, it's Maya from   starbucks Coffee Co. Join   starbucks Rewards free and get a pastry on us with your next drink: {link}",
+        "email_subject": "{first_name}, a free pastry with   starbucks Rewards",
+        "email_body": "Hi {first_name},\n\nThanks for chatting with Maya today. Join   starbucks Rewards for free and get a pastry on us with your next drink:\n{link}\n\n  starbucks Coffee Co.\n(210) 555-0188"
+      },
+      "events": {
+        "label": "Join + early access to tastings and latte-art classes",
+        "when": "They like trying new coffees, tastings, classes, or community events.",
+        "link": "https://www.mlh.com/events/prizes",
+        "sms": "Hi {first_name}, it's Maya from   starbucks Coffee Co. Join   starbucks Rewards free for early access to tastings and classes: {link}",
+        "email_subject": "{first_name}, early access to   starbucks tastings",
+        "email_body": "Hi {first_name},\n\nThanks for talking with Maya today. Join   starbucks Rewards for free and get early access to our tastings and latte-art classes:\n{link}\n\n  starbucks Coffee Co.\n(210) 555-0188"
+      }
+    }
+  },
+  "calling_hours": {
+    "start": "09:00",
+    "end": "20:00",
+    "timezone": "America/Chicago",
+    "days": "mon-sun"
+  },
+  "max_concurrent_calls": 1,
+  "max_attempts": 2,
+  "ring_timeout_seconds": 25,
+  "answering_machine": "off",
+  "opt_out_digit": "9",
+  "max_call_seconds": 240,
+  "keyterms": [
+    "  starbucks",
+    "  starbucks Rewards",
+    "latte",
+    "espresso"
+  ]
+}
