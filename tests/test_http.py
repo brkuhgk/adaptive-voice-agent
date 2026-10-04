@@ -56,3 +56,10 @@ def test_dashboard_token_is_enforced(client, monkeypatch):
 def test_health_reports_config_problems(client):
     body = client.get("/health").json()
     assert "problems" in body and body["scenario"] == "clinic"
+
+
+def test_email_contacts_requires_supabase_settings(client, monkeypatch):
+    monkeypatch.setattr(main.settings, "supabase_url", "")
+    monkeypatch.setattr(main.settings, "supabase_key", "")
+    r = client.get("/api/emails/contacts")
+    assert r.status_code == 400 and "SUPABASE_URL" in r.json()["detail"]

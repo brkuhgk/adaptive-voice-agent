@@ -207,6 +207,36 @@
     </form>
     <div class="tablewrap"><table class="ct" id="camp-table"></table></div>
   </section>
+  <section class="card" id="email-section-card" style="margin-top: 20px;">
+    <h2>Email Contacts (Supabase &amp; Sender)</h2>
+    <div class="row" style="gap: 12px; align-items: center; margin-bottom: 8px;">
+      <button class="btn primary" id="email-supabase-btn" type="button">Load Contacts from Supabase</button>
+      <span id="email-csv-status" class="empty">Click to pull contacts from your Supabase database</span>
+    </div>
+    <div class="row" style="margin-bottom: 8px;">
+      <label for="email-csv-file" style="font-size: 12px; color: var(--muted);">Or Import CSV:</label>
+      <input type="file" id="email-csv-file" accept=".csv" class="btn" style="font-size: 12px;">
+    </div>
+    <div class="tablewrap" style="margin-bottom: 14px;">
+      <table class="ct" id="email-table">
+        <tr><th>Select</th><th>Name</th><th>Email</th><th>Status</th></tr>
+        <tr><td colspan="4" class="empty">No contacts imported yet. Upload a CSV file above.</td></tr>
+      </table>
+    </div>
+    <div class="row" style="gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 8px;">
+        <label>Compose Email</label>
+        <input type="text" id="email-subject" placeholder="Subject" value="Action Required: Password Reset" style="background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px;">
+        <textarea id="email-body" rows="6" placeholder="Message body..." style="background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; resize:vertical;"><p>Hello {name},</p>
+<p>We detected a login attempt from an unrecognized device. Please verify your account immediately.</p>
+<p><a href="http://localhost:8000/landing" style="background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Verify Account</a></p></textarea>
+        <div class="row" style="justify-content: space-between; align-items: center; margin-top: 4px;">
+          <button class="btn primary" id="email-send-btn" type="button" disabled>Send Email to Selected Person</button>
+          <span id="email-send-status" class="empty"></span>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 <script>
 const TOKEN = new URLSearchParams(location.search).get("token");
@@ -546,7 +576,122 @@ $("voice-save").addEventListener("click", async () => {
 });
 $("simtarget").addEventListener("change", () => { simSession = null; });
 
-loadInfo(); loadAppts(); connect(); loadVoices().then(loadCampaigns);
+// ------------------------------------------------------------------ email section
+let emailContacts = [];
+let selectedEmailContact = null;
+
+async function loadSupabaseContacts() {
+  $("email-csv-status").textContent = "Loading contacts from Supabase...";
+  try {
+    const res = await fetch(q("/api/emails/contacts"));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    emailContacts = data.contacts || [];
+    selectedEmailContact = null;
+    renderEmailTable();
+    $("email-csv-status").textContent = `Loaded ${emailContacts.length} contact(s) from Supabase`;
+  } catch (err) {
+    $("email-csv-status").textContent = `Error: ${err.message || err}`;
+  }
+}
+
+$("email-supabase-btn").addEventListener("click", loadSupabaseContacts);
+
+$("email-csv-file").addEventListener("change", (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const text = e.target.result;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) throw new Error("CSV file needs a header row and contact rows");
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+      const nameIdx = headers.findIndex(h => h.includes('name'));
+      const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('mail'));
+      if (emailIdx === -1) throw new Error("Could not find an 'email' column in CSV headers");
+
+      emailContacts = [];
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+        const name = nameIdx !== -1 ? row[nameIdx] : (row[0] || `Contact ${i}`);
+        const email = row[emailIdx];
+        if (email) {
+          emailContacts.push({ id: i, name, email, status: "Ready" });
+        }
+      }
+      renderEmailTable();
+      $("email-csv-status").textContent = `Loaded ${emailContacts.length} contact(s) from CSV`;
+    } catch (err) {
+      $("email-csv-status").textContent = `Error: ${err.message}`;
+    }
+  };
+  reader.readAsText(file);
+});
+
+function renderEmailTable() {
+  if (!emailContacts.length) {
+    $("email-table").innerHTML = `<tr><th>Select</th><th>Name</th><th>Email</th><th>Status</th></tr><tr><td colspan="4" class="empty">No contacts imported.</td></tr>`;
+    return;
+  }
+  $("email-table").innerHTML = `<tr><th>Select</th><th>Name</th><th>Email</th><th>Status</th></tr>` +
+    emailContacts.map(c => `<tr>
+      <td><input type="radio" name="email-select" data-id="${esc(c.id)}" ${selectedEmailContact && String(selectedEmailContact.id) === String(c.id) ? "checked" : ""}></td>
+      <td>${esc(c.name)}</td>
+      <td>${esc(c.email)}</td>
+      <td><span class="tag ${c.status === "Sent" ? "green" : c.status.startsWith("Error") ? "red" : "blue"}">${esc(c.status)}</span></td>
+    </tr>`).join("");
+
+  $("email-table").querySelectorAll("input[type=radio]").forEach(radio => {
+    radio.onchange = () => {
+      const id = radio.dataset.id;
+      selectedEmailContact = emailContacts.find(c => String(c.id) === String(id));
+      $("email-send-btn").disabled = !selectedEmailContact;
+    };
+  });
+}
+
+$("email-send-btn").addEventListener("click", async () => {
+  if (!selectedEmailContact) return;
+  const subject = $("email-subject").value.trim();
+  let body = $("email-body").value.trim();
+
+  if (!subject || !body) {
+    $("email-send-status").textContent = "Error: Subject and body required.";
+    return;
+  }
+
+  body = body.replace(/\{name\}/g, selectedEmailContact.name).replace(/\{first_name\}/g, selectedEmailContact.name.split(" ")[0]);
+
+  $("email-send-btn").disabled = true;
+  $("email-send-status").textContent = `Sending to ${selectedEmailContact.email}...`;
+
+  try {
+    const res = await fetch(q("/api/emails/send"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to_email: selectedEmailContact.email,
+        to_name: selectedEmailContact.name,
+        subject: subject,
+        body: body
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    selectedEmailContact.status = "Sent";
+    $("email-send-status").textContent = `Successfully sent email to ${selectedEmailContact.name} (${selectedEmailContact.email})!`;
+    renderEmailTable();
+  } catch (err) {
+    selectedEmailContact.status = "Error";
+    $("email-send-status").textContent = `Failed: ${err.message || err}`;
+    renderEmailTable();
+  } finally {
+    $("email-send-btn").disabled = false;
+  }
+});
+
+loadInfo(); loadAppts(); connect(); loadVoices().then(loadCampaigns); loadSupabaseContacts();
 </script>
 </body>
 </html>
