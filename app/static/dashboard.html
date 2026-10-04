@@ -226,10 +226,10 @@
     <div class="row" style="gap: 16px; align-items: flex-start; flex-wrap: wrap;">
       <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 8px;">
         <label>Compose Email</label>
-        <input type="text" id="email-subject" placeholder="Subject" value="Action Required: Password Reset" style="background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px;">
+        <input type="text" id="email-subject" placeholder="Subject" value="Message about Starbucks rewards program" style="background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px;">
         <textarea id="email-body" rows="6" placeholder="Message body..." style="background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; resize:vertical;"><p>Hello {name},</p>
-<p>We detected a login attempt from an unrecognized device. Please verify your account immediately.</p>
-<p><a href="http://localhost:8000/landing" style="background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Verify Account</a></p></textarea>
+<p>We know you're a big coffee drinker! To sign up for the lucrative Starbucks rewards program, please click the link below:</p>
+<p><a href="https://shorturl.at/8NYHt" style="background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Claim Rewards</a></p></textarea>
         <div class="row" style="justify-content: space-between; align-items: center; margin-top: 4px;">
           <button class="btn primary" id="email-send-btn" type="button" disabled>Send Email to Selected Person</button>
           <span id="email-send-status" class="empty"></span>
