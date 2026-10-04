@@ -18,6 +18,6 @@
 - Events: early access to tastings and classes.
 
 # The shop
--   starbucks Coffee Co., 410 Market Street, San Antonio.
+-   starbucks, 410 Market Street, San Antonio.
 - Open 6:30 a.m. to 7 p.m. every day.
 - Questions: (210) 555-0188.

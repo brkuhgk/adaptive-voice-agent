@@ -4,6 +4,7 @@
   "org_name": "  starbucks",
   "callback_number": "+14473474251",
   "voice_id": "EXAVITQu4vr4xnSDxMaL",
+  "supabase_contacts": {"table": "signup_requests", "skip_status": ["revoked"]},
   "goal": "Tell {first_name} about   starbucks Rewards, our free loyalty program for regular customers. Find out what they enjoy most, and if they want to join, send them the sign-up link that fits their interest by text or email.",
   "opening_line": "Hi, this is Maya calling from   starbucks Coffee Co. Am I speaking with {first_name}?",
   "disclose_ai_in_opening": false,

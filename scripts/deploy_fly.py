@@ -371,6 +371,19 @@ def collect_keys(state: dict) -> dict:
         out.update(EMAIL_PROVIDER="", SENDGRID_API_KEY="")
         warn("Email skipped. Maya describes the perk and says the team will send the link; it's noted in results.")
 
+    step("3f", "Supabase contacts and call history (optional)")
+    sb_url, sb_key = preset("SUPABASE_URL").rstrip("/"), preset("SUPABASE_SERVICE_ROLE_KEY")
+    if sb_url and sb_key:
+        headers = {"apikey": sb_key, **({"Authorization": f"Bearer {sb_key}"} if sb_key.startswith("eyJ") else {})}
+        status, body = http("GET", f"{sb_url}/rest/v1/call_conversations?select=id&limit=1", headers)
+        if status == 200:
+            ok("Supabase works: contacts from signup_requests, calls saved to call_conversations")
+        else:
+            warn(f"Supabase said {status}: {str(body)[:200]} (did you run supabase/schema.sql?)")
+        out.update(SUPABASE_URL=sb_url, SUPABASE_SERVICE_ROLE_KEY=sb_key)
+    else:
+        say(f"   {D}Skipped: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env to turn it on.{X}")
+
     out["STREAM_SECRET"] = secrets.token_urlsafe(32)
     out["DASHBOARD_TOKEN"] = state.get("dashboard_token") or secrets.token_urlsafe(18)
     state["dashboard_token"] = out["DASHBOARD_TOKEN"]
