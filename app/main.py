@@ -4,6 +4,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import smtplib
+from email.message import EmailMessage
+import os
+import httpx
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -240,6 +244,95 @@ async def outbound_call(body: OutboundCall, token: str | None = None):
     call = await asyncio.to_thread(client.calls.create, to=body.to, from_=settings.twilio_phone_number,
                                    url=f"{settings.public_base_url}/voice/incoming")
     return {"call_sid": call.sid}
+
+
+@app.get("/api/emails/contacts")
+async def get_supabase_contacts(token: str | None = None):
+    _check_dashboard_token(token)
+    if not settings.supabase_url or not settings.supabase_key:
+        raise HTTPException(
+            status_code=400,
+            detail="SUPABASE_URL and SUPABASE_KEY must be set in .env to pull email contacts from Supabase."
+        )
+    base_url = settings.supabase_url.strip()
+    if not base_url.startswith("http://") and not base_url.startswith("https://"):
+        base_url = f"https://{base_url}"
+    url = f"{base_url.rstrip('/')}/rest/v1/{settings.supabase_table}?select=*"
+    headers = {
+        "apikey": settings.supabase_key,
+        "Authorization": f"Bearer {settings.supabase_key}",
+        "Accept": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Supabase error ({resp.status_code}): {resp.text}")
+        data = resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to connect to Supabase (check SUPABASE_URL and table name): {exc}")
+
+    contacts = []
+    for i, row in enumerate(data if isinstance(data, list) else [], start=1):
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name") or row.get("full_name") or row.get("first_name") or f"Contact {i}"
+        email = row.get("email") or row.get("email_address") or row.get("mail") or ""
+        if email:
+            contacts.append({
+                "id": row.get("id") or i,
+                "name": str(name).strip(),
+                "email": str(email).strip(),
+                "status": "Ready"
+            })
+    return {"contacts": contacts, "count": len(contacts)}
+
+
+class EmailSendRequest(BaseModel):
+    to_email: str
+    to_name: str = ""
+    subject: str
+    body: str
+
+
+@app.post("/api/emails/send")
+async def send_email_api(body: EmailSendRequest, token: str | None = None):
+    _check_dashboard_token(token)
+    if not body.to_email:
+        raise HTTPException(status_code=400, detail="Recipient email is required")
+
+    gmail_user = os.environ.get("GMAIL_USER") or settings.smtp_user or settings.email_from
+    gmail_password = os.environ.get("GMAIL_APP_PASSWORD") or settings.smtp_password
+
+    if not gmail_user or not gmail_password:
+        raise HTTPException(status_code=400, detail="GMAIL_USER and GMAIL_APP_PASSWORD must be set in .env")
+
+    def _send():
+        msg = EmailMessage()
+        msg["Subject"] = body.subject
+        msg["From"] = gmail_user
+        msg["To"] = f"{body.to_name} <{body.to_email}>" if body.to_name else body.to_email
+        
+        if "<" in body.body and ">" in body.body:
+            msg.set_content("This email requires an HTML-compatible client.")
+            msg.add_alternative(body.body, subtype='html')
+        else:
+            msg.set_content(body.body)
+            html_body = f"<html><body><p>{body.body.replace(chr(10), '<br>')}</p></body></html>"
+            msg.add_alternative(html_body, subtype='html')
+
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:
+                server.login(gmail_user, gmail_password)
+                server.send_message(msg)
+            return {"ok": True}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    result = await asyncio.to_thread(_send)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to send email"))
+    return result
 
 
 # ------------------------------------------------------------------ campaigns API

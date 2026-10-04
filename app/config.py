@@ -90,6 +90,11 @@ class Settings:
     smtp_user: str = field(default_factory=lambda: os.getenv("SMTP_USER", ""))
     smtp_password: str = field(default_factory=lambda: os.getenv("SMTP_PASSWORD", ""))
 
+    # --- Supabase --------------------------------------------------------
+    supabase_url: str = field(default_factory=lambda: os.getenv("SUPABASE_URL", ""))
+    supabase_key: str = field(default_factory=lambda: os.getenv("SUPABASE_KEY", os.getenv("SUPABASE_SERVICE_ROLE_KEY", os.getenv("SUPABASE_ANON_KEY", ""))))
+    supabase_table: str = field(default_factory=lambda: os.getenv("SUPABASE_TABLE", "contacts"))
+
     # --- Server ----------------------------------------------------------
     public_base_url: str = field(default_factory=lambda: os.getenv("PUBLIC_BASE_URL", "").rstrip("/"))
     scenario: str = field(default_factory=lambda: os.getenv("SCENARIO", "clinic"))
