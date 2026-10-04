@@ -8,6 +8,9 @@ A campaign is one folder. You edit four files; the code reads them at the start 
         content.md        facts the agent may use when it talks
         contacts.csv      who to call: phone, name, consent, plus any extra columns you want
 
+With "supabase_contacts" in campaign.json, people from the Supabase signup_requests table are added to
+the list too (see app/supabase_db.py). A number already in contacts.csv keeps its CSV row.
+
 Results go to campaigns/<name>/results.csv (one row per contact) and campaigns/<name>/transcripts/.
 People added from the dashboard go to <data dir>/<name>/contacts_added.csv (same columns as contacts.csv).
 Numbers that ask not to be called again go to campaigns/do_not_call.txt (shared by all campaigns).
@@ -27,6 +30,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from . import supabase_db
 from .profiles import AgentProfile
 from .state import ConversationState
 
@@ -50,7 +54,8 @@ DEFAULT_OUTCOMES = ["completed", "not_interested", "callback_requested", "wrong_
 SYSTEM_OUTCOMES = ["voicemail_left", "machine_no_message", "hung_up", "no_conversation"]
 RETRY_OUTCOMES = {"", "voicemail_left", "machine_no_message", "no_conversation"}
 AI_DISCLOSURE = re.compile(r"\b(AI|A\.I\.|artificial|virtual assistant|automated assistant)\b")
-RESERVED_COLUMNS = {"phone", "consent", "timezone", "voice_id", "id", "email"}
+RESERVED_COLUMNS = {"phone", "consent", "timezone", "voice_id", "id", "email",
+                    "signup_request_id", "status", "consented_at", "created_at"}
 ADDED_CONTACTS = "contacts_added.csv"
 VOICE_ID_RE = re.compile(r"^[A-Za-z0-9]{20}$")  # ElevenLabs voice IDs
 
@@ -75,10 +80,17 @@ class Contact:
     row: int
     columns: dict[str, str] = field(default_factory=dict)
     added: bool = False  # added from the dashboard, not contacts.csv
+    source: str = "csv"  # csv | dashboard | supabase
 
     @property
     def where(self) -> str:
+        if self.source == "supabase":
+            return f"Supabase sign-up {self.name or self.phone}"
         return f"added contact {self.name or self.phone}" if self.added else f"contacts.csv row {self.row}"
+
+    @property
+    def signup_request_id(self) -> str:
+        return self.columns.get("signup_request_id", "")
 
     @property
     def first_name(self) -> str:
@@ -232,7 +244,8 @@ class Campaign:
             r = results.get(c.id) or {}
             rows.append({"id": c.id, "name": c.name, "phone": mask(c.phone), "eligible": ok, "reason": reason,
                          "can_call": can_call, "call_reason": call_reason, "can_call_any_time": any_time,
-                         "added": c.added, "call_status": r.get("call_status", ""), "outcome": r.get("outcome", ""),
+                         "added": c.added, "source": c.source, "call_status": r.get("call_status", ""),
+                         "outcome": r.get("outcome", ""),
                          "attempts": r.get("attempts", "0"), "note": mask_numbers(r.get("note", "")),
                          "summary": r.get("summary", ""), "followups": r.get("followups", ""),
                          "voice_id": c.voice_id or self.voice_id or ""})
@@ -290,9 +303,12 @@ def load_campaign(name: str) -> Campaign:
     instructions, content = read("instructions.md"), read("content.md")
     csv_path = path / "contacts.csv"
     contacts = _read_contacts(csv_path)
-    if not csv_path.exists():
+    source = _supabase_source(config)
+    if not csv_path.exists() and source is None:
         issues.append(Issue("error", "contacts.csv is missing"))
     contacts += _read_contacts(data_root() / name / ADDED_CONTACTS, added=True)
+    if source is not None:
+        contacts += _read_supabase_contacts(source, contacts, issues)
 
     camp = Campaign(name, path, config, instructions, content, contacts, issues)
     _validate(camp)
@@ -313,9 +329,58 @@ def _read_contacts(csv_path: Path, added: bool = False) -> list[Contact]:
             contacts.append(Contact(
                 id=cid, phone=phone, name=row.get("name", ""), consent=row.get("consent", "").lower() in YES,
                 timezone=row.get("timezone") or None, voice_id=row.get("voice_id") or None, row=i, columns=row,
-                added=added,
+                added=added, source="dashboard" if added else "csv",
             ))
     return contacts
+
+
+def _supabase_source(config: dict[str, Any]) -> dict[str, Any] | None:
+    """campaign.json "supabase_contacts": true, or
+    {"table": "signup_requests", "skip_status": ["revoked"], "order": "consented_at.asc"}."""
+    raw = config.get("supabase_contacts")
+    if not raw:
+        return None
+    spec = raw if isinstance(raw, dict) else {}
+    return {"table": spec.get("table", supabase_db.SIGNUPS_TABLE),
+            "skip_status": [s.lower() for s in spec.get("skip_status", ["revoked"])],
+            "order": spec.get("order", "consented_at.asc")}
+
+
+def _read_supabase_contacts(source: dict[str, Any], existing: list[Contact], issues: list[Issue]) -> list[Contact]:
+    """People from the sign-up table. consent=false or a skipped status (revoked) shows as 'no consent'.
+    A phone already in contacts.csv keeps its CSV row, but gets linked to the sign-up."""
+    if not supabase_db.enabled():
+        issues.append(Issue("warning", "supabase_contacts is on, but SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY "
+                                       "are not set: showing contacts.csv only"))
+        return []
+    try:
+        rows = supabase_db.fetch_signups(source["table"], source["order"])
+    except supabase_db.SupabaseError as exc:
+        issues.append(Issue("warning", f"Supabase: {exc}. Showing contacts.csv only."))
+        return []
+    by_phone: dict[str, Contact] = {}
+    for c in existing:
+        by_phone.setdefault(c.phone, c)  # the first row wins, like the dialer's duplicate check
+    out: list[Contact] = []
+    for i, r in enumerate(rows, start=1):
+        cols = {str(k).lower(): "" if v is None else str(v).strip() for k, v in r.items()}
+        phone = normalize_phone(cols.get("phone", ""))
+        if not phone and not cols.get("name"):
+            continue
+        signup_id = cols.pop("id", "")
+        cols["signup_request_id"] = signup_id
+        match = by_phone.get(phone)
+        if match is not None:
+            match.columns.setdefault("signup_request_id", signup_id)
+            continue
+        status = cols.get("status", "").lower()
+        consent = cols.get("consent", "").lower() in YES and status not in source["skip_status"]
+        contact = Contact(id=re.sub(r"\D", "", phone) or f"sb{i}", phone=phone, name=cols.get("name", ""),
+                          consent=consent, timezone=cols.get("timezone") or None,
+                          voice_id=cols.get("voice_id") or None, row=i, columns=cols, source="supabase")
+        by_phone[phone] = contact
+        out.append(contact)
+    return out
 
 
 def add_contact(campaign: Campaign, phone: str, name: str, email: str = "", dnc: "DoNotCallList | None" = None) -> Contact:
@@ -759,6 +824,7 @@ by {how}. Only after a clear yes, call send_followup. At most {fu['max_per_call'
         state.outcome = "opted_out"
         if not self.dry_run:
             self.dnc.add(self.contact.phone, f"campaign={self.campaign.name} via {how}")
+            supabase_db.revoke_signup(self.contact.signup_request_id)
 
     def on_call_end(self, state: ConversationState) -> None:
         if self.dry_run:
@@ -780,6 +846,12 @@ by {how}. Only after a clear yes, call send_followup. At most {fu['max_per_call'
             "call_sid": state.call_id, "outcome": outcome, "summary": state.summary, "fields": state.fields,
             "ended_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "transcript": state.transcript,
         })
+        # Built after in-flight follow-ups finish, so the row says sent/failed rather than sending.
+        supabase_db.save_conversation(lambda: supabase_db.conversation_record(
+            state, kind="campaign", outcome=outcome, campaign=self.campaign.name, contact_id=self.contact.id,
+            signup_request_id=self.contact.signup_request_id or None, contact_name=self.contact.name,
+            phone=self.contact.phone, mode=self.mode, voice_id=self.voice_id or "default",
+            followups=[dict(s) for s in self.sent]), before=self.wait_for_sends)
 
 
 def _campaign_phase(state: ConversationState) -> str:

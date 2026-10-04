@@ -90,6 +90,12 @@ class Settings:
     smtp_user: str = field(default_factory=lambda: os.getenv("SMTP_USER", ""))
     smtp_password: str = field(default_factory=lambda: os.getenv("SMTP_PASSWORD", ""))
 
+    # --- Supabase (optional) ---------------------------------------------
+    # Contacts from the signup_requests table + one call_conversations row per call (supabase/schema.sql).
+    # Use the service_role / secret key: it stays on the server and bypasses row-level security.
+    supabase_url: str = field(default_factory=lambda: os.getenv("SUPABASE_URL", ""))
+    supabase_key: str = field(default_factory=lambda: os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
+
     # --- Server ----------------------------------------------------------
     public_base_url: str = field(default_factory=lambda: os.getenv("PUBLIC_BASE_URL", "").rstrip("/"))
     scenario: str = field(default_factory=lambda: os.getenv("SCENARIO", "clinic"))

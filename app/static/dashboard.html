@@ -461,7 +461,7 @@ async function loadCampaign() {
         const note = [x.eligible ? "" : x.reason, x.note, x.followups && `sent: ${x.followups}`, x.summary].filter(Boolean).join(" · ");
         const why = canCall(x) ? "" : ` title="${esc(x.can_call_any_time ? x.call_reason + " (tick 'Call outside calling hours')" : x.call_reason)}"`;
         return `<tr><td><input type="checkbox" class="pick" data-id="${esc(x.id)}" aria-label="Select ${esc(x.name)}" ${picked.has(x.id) ? "checked" : ""} ${canCall(x) && !c.running ? "" : "disabled"}${why}></td>` +
-          `<td>${esc(x.name)}${x.added ? ' <span class="tag blue">added</span>' : ""}</td><td>${esc(x.phone)}</td><td>${x.eligible ? "✓" : "–"}</td><td>${esc(x.call_status)}</td>` +
+          `<td>${esc(x.name)}${x.added ? ' <span class="tag blue">added</span>' : ""}${x.source === "supabase" ? ' <span class="tag green" title="From the Supabase sign-up table">supabase</span>' : ""}</td><td>${esc(x.phone)}</td><td>${x.eligible ? "✓" : "–"}</td><td>${esc(x.call_status)}</td>` +
           `<td>${x.outcome ? `<span class="tag ${x.outcome === "opted_out" ? "red" : "green"}" style="margin:0">${esc(pretty(x.outcome))}</span>` : ""}</td><td>${esc(x.attempts)}</td>` +
           `<td class="note">${esc(note)}${canCall(x) || x.call_reason === x.reason ? "" : ` · can't call: ${esc(x.call_reason)}`}</td>` +
           `<td><button class="btn primary call-one" type="button" data-id="${esc(x.id)}" ${canCall(x) && !c.running ? "" : "disabled"}${why}>Call</button>` +

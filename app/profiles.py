@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import supabase_db
 from .prompt import build_system_prompt, build_tracker_messages
 from .scenario import Scenario
 from .scheduling import ClinicSchedule
@@ -84,3 +85,23 @@ class ClinicProfile(AgentProfile):
 
     def tracker_messages(self, state: ConversationState) -> list[dict[str, str]]:
         return build_tracker_messages(state, self.schedule.today().isoformat())
+
+    def on_call_end(self, state: ConversationState) -> None:
+        """Inbound calls keep no CSV; they go to Supabase call_conversations when it is set up."""
+        if state.labels.get("text_mode"):
+            return
+        if state.urgency == "emergency":
+            outcome = "emergency"
+        elif state.appointment:
+            outcome = "booked"
+        elif state.cancelled:
+            outcome = "cancelled"
+        elif state.end_requested:
+            outcome = "completed"
+        else:
+            outcome = "hung_up" if state.turns > 0 else "no_conversation"
+        supabase_db.save_conversation(lambda: {
+            **supabase_db.conversation_record(state, kind="clinic", outcome=outcome, mode="live",
+                                              voice_id=self.voice_id or "default"),
+            "summary": state.summary or state.end_reason,
+        })

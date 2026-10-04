@@ -5,6 +5,9 @@
 > **New here?** Read [docs/GUIDE.md](docs/GUIDE.md). It explains the repo from first principles, with diagrams and
 > step-by-step procedures (written in ASD-STE100 Simplified Technical English).
 
+> **Supabase:** contacts can come from the `signup_requests` table, and every call is saved to
+> `call_conversations`. Setup and example queries: [docs/SUPABASE.md](docs/SUPABASE.md).
+
 Two ways to use it:
 
 - **Inbound:** call a phone number and talk to **Maya**, an AI scheduling assistant at a fictional clinic.
